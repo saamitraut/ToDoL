@@ -15,66 +15,73 @@ namespace ToDoListApp
         {
             string connectionString = @"Data Source=DESKTOP-Q8H73VQ\SQLEXPRESS;Initial Catalog=ToDoListDB;Integrated Security=True";
 
+             Console.WriteLine("To-Do List Application\n");
+
             using (SqlConnection connection = new SqlConnection(connectionString))
             {
                 connection.Open();
 
+                // Flag to control the main application loop
                 bool isRunning = true;
 
                 while (isRunning)
                 {
 
-                    Console.WriteLine("To-Do List Application\n");
-                    Console.WriteLine("1. User Registration\t\t2. User Login\t3. Add Task\t4. View Active Tasks\t5. View Completed Tasks");
-                    Console.WriteLine("6. Mark Task as Completed\t7. Logout\t8. Quit\t\t9. Assign Role\t\t10. List Roles");
-                    
-                    Console.Write("\nEnter your choice: ");
+                    Console.Write("\nEnter your choice (enter 0 to see menu): ");
+
                     string choice = Console.ReadLine();
 
-                    switch (choice)
+                    if (choice == "0")
                     {
-                        case "1":
-                            RegisterUser(connection);
-                            break;
-                        case "2":
-                            LoginUser(connection);
-                            break;
-                        case "3":
-                            AddTask(connection);
-                            break;
-                        case "4":
-                            ViewTasks(connection, "Active Tasks:");
-                            break;
-                        case "5":
-                            ViewTasks(connection, "Completed Tasks:");
-                            break;
-                        case "6":
-                            MarkTaskAsCompleted(connection);
-                            break;
-                        case "7":
-                            LogoutUser(connection);
-                            break;
-                        case "8":                            
-                            isRunning = false;
-                            LogoutUser(connection);
-                            Console.WriteLine("Goodbye!");
-                            break;
-                        case "9":
-                            AssignUserRole(connection, loggedInUsername,"Admin");
-                            break;
-                        case "10":
-                            ListRoles(connection);
-                            break;
-                        default:
-                            Console.WriteLine("Invalid choice. Please choose again.");
-                            break;
+                        Console.WriteLine("1. User Registration\t\t2. User Login\t3. Add Task\t4. View Active Tasks\t5. View Completed Tasks");
+                        Console.WriteLine("6. Mark Task as Completed\t7. Logout\t8. Quit\t\t9. Assign Role\t\t10. List Roles");
                     }
+                    else {
+                        switch (choice)
+                        {
+                            case "1":
+                                RegisterUser(connection);
+                                break;
+                            case "2":
+                                LoginUser(connection);
+                                break;
+                            case "3":
+                                AddTask(connection);
+                                break;
+                            case "4":
+                                ViewTasks(connection, "Active Tasks:");
+                                break;
+                            case "5":
+                                ViewTasks(connection, "Completed Tasks:");
+                                break;
+                            case "6":
+                                MarkTaskAsCompleted(connection);
+                                break;
+                            case "7":
+                                LogoutUser(connection);
+                                break;
+                            case "8":
+                                isRunning = false;
+                                LogoutUser(connection);
+                                Console.WriteLine("Goodbye!");
+                                break;
+                            case "9":
+                                AssignUserRole(connection, loggedInUsername, "Admin");
+                                break;
+                            case "10":
+                                ListRoles(connection);
+                                break;
+                            default:
+                                Console.WriteLine("Invalid choice. Please choose again.");
+                                break;
+                        }
 
+                    }
+                    
                     Console.WriteLine();
                 }
             }
         }
-
 
         static void RegisterUser(SqlConnection connection)
         {
@@ -110,6 +117,93 @@ namespace ToDoListApp
                 {
                     Console.WriteLine("Error registering user.");
                 }
+            }
+        }
+
+        static void LoginUser(SqlConnection connection)
+        {
+            // Check if the user is already logged in (based on an existing session)
+            if (IsUserLoggedIn(connection, loggedInUsername))
+            {
+                Console.WriteLine("You are already logged in.");
+                return;
+            }
+
+            Console.Write("Enter your username: ");
+            string username = Console.ReadLine();
+
+            Console.Write("Enter your password: ");
+            string password = Console.ReadLine();
+
+            // TODO: Implement password hashing and validation
+
+            // SQL query to check if the user with the provided credentials exists
+            string loginQuery = $"SELECT UserID FROM Users WHERE Username = '{username}' AND PasswordHash = '{password}'";
+
+            using (SqlCommand command = new SqlCommand(loginQuery, connection))
+            {
+                object result = command.ExecuteScalar();
+                if (result != null)
+                {
+                    int userId = (int)result;
+
+                    // Create a new session record in the Sessions table
+                    string sessionId = Guid.NewGuid().ToString();
+                    DateTime loginTime = DateTime.Now;
+
+                    // SQL query to insert session information
+                    string insertSessionQuery = $"INSERT INTO Sessions (SessionID, UserID, LoginTime) VALUES ('{sessionId}', {userId}, '{loginTime:yyyy-MM-dd HH:mm:ss}')";
+
+                    using (SqlCommand sessionCommand = new SqlCommand(insertSessionQuery, connection))
+                    {
+                        int rowsAffected = sessionCommand.ExecuteNonQuery();
+                        if (rowsAffected > 0)
+                        {
+                            Console.WriteLine("Login successful!");
+                            Console.WriteLine("Session ID: " + sessionId); SessionId = sessionId;
+                            // Set the logged-in username
+                            loggedInUsername = username;
+                        }
+                        else
+                        {
+                            Console.WriteLine("Error creating session.");
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Invalid username or password.");
+                }
+            }
+        }
+
+        static void LogoutUser(SqlConnection connection)
+        {
+            if (string.IsNullOrEmpty(loggedInUsername))
+            {
+                Console.WriteLine("You are not currently logged in.");
+            }
+            else
+            {
+                Console.WriteLine("Logging out " + loggedInUsername);
+
+                // Update the LogoutTime in the Sessions table for the user's session
+                string updateSessionQuery = $"UPDATE Sessions SET LogoutTime = '{DateTime.Now:yyyy-MM-dd HH:mm:ss}' WHERE UserID = (SELECT UserID FROM Users WHERE Username = '{loggedInUsername}') AND SessionId = '{SessionId}'";
+
+                using (SqlCommand command = new SqlCommand(updateSessionQuery, connection))
+                {
+                    int rowsAffected = command.ExecuteNonQuery();
+                    if (rowsAffected > 0)
+                    {
+                        Console.WriteLine("Logout successful!");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Error logging out.");
+                    }
+                }
+
+                loggedInUsername = null;
             }
         }
 
@@ -212,63 +306,7 @@ namespace ToDoListApp
             }
         }
 
-        static void LoginUser(SqlConnection connection)
-        {
-            // Check if the user is already logged in (based on an existing session)
-            if (IsUserLoggedIn(connection, loggedInUsername))
-            {
-                Console.WriteLine("You are already logged in.");
-                return;
-            }
-
-            Console.Write("Enter your username: ");
-            string username = Console.ReadLine();
-
-            Console.Write("Enter your password: ");
-            string password = Console.ReadLine();
-
-            // TODO: Implement password hashing and validation
-
-            // SQL query to check if the user with the provided credentials exists
-            string loginQuery = $"SELECT UserID FROM Users WHERE Username = '{username}' AND PasswordHash = '{password}'";
-
-            using (SqlCommand command = new SqlCommand(loginQuery, connection))
-            {
-                object result = command.ExecuteScalar();
-                if (result != null)
-                {
-                    int userId = (int)result;
-
-                    // Create a new session record in the Sessions table
-                    string sessionId = Guid.NewGuid().ToString();
-                    DateTime loginTime = DateTime.Now;
-
-                    // SQL query to insert session information
-                    string insertSessionQuery = $"INSERT INTO Sessions (SessionID, UserID, LoginTime) VALUES ('{sessionId}', {userId}, '{loginTime:yyyy-MM-dd HH:mm:ss}')";
-
-                    using (SqlCommand sessionCommand = new SqlCommand(insertSessionQuery, connection))
-                    {
-                        int rowsAffected = sessionCommand.ExecuteNonQuery();
-                        if (rowsAffected > 0)
-                        {
-                            Console.WriteLine("Login successful!");
-                            Console.WriteLine("Session ID: " + sessionId); SessionId = sessionId;
-                            // Set the logged-in username
-                            loggedInUsername = username;
-                        }
-                        else
-                        {
-                            Console.WriteLine("Error creating session.");
-                        }
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("Invalid username or password.");
-                }
-            }
-        }
-
+        
         static void AssignUserRole(SqlConnection connection, string username, string roleName)
         {
             // Check if the user exists
@@ -323,49 +361,28 @@ namespace ToDoListApp
             }
         }
 
-        static void LogoutUser(SqlConnection connection)
-        {
-            if (string.IsNullOrEmpty(loggedInUsername))
-            {
-                Console.WriteLine("You are not currently logged in.");
-            }
-            else
-            {
-                Console.WriteLine("Logging out " + loggedInUsername);
-
-                // Update the LogoutTime in the Sessions table for the user's session
-                string updateSessionQuery = $"UPDATE Sessions SET LogoutTime = '{DateTime.Now:yyyy-MM-dd HH:mm:ss}' WHERE UserID = (SELECT UserID FROM Users WHERE Username = '{loggedInUsername}') AND SessionId = '{SessionId}'";
-
-                using (SqlCommand command = new SqlCommand(updateSessionQuery, connection))
-                {
-                    int rowsAffected = command.ExecuteNonQuery();
-                    if (rowsAffected > 0)
-                    {
-                        Console.WriteLine("Logout successful!");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Error logging out.");
-                    }
-                }
-
-                loggedInUsername = null;
-            }
-        }
-
+        
         static void AddTask(SqlConnection connection)
         {
-            Console.Write("Enter the task: ");
-            string task = Console.ReadLine();
-
-            string insertQuery = $"INSERT INTO Tasks (TaskName) VALUES ('{task}')";
-
-            using (SqlCommand command = new SqlCommand(insertQuery, connection))
+            string task = "";
+            
+            while (task != "0")
             {
-                command.ExecuteNonQuery();
-                Console.WriteLine("Task added!");
+                Console.Write("Enter the task (enter 0 to exit): ");
+                task = Console.ReadLine();
+                
+                if (task == "0") continue;
+                
+                string insertQuery = $"INSERT INTO Tasks (TaskName) VALUES ('{task}')";
+
+                using (SqlCommand command = new SqlCommand(insertQuery, connection))
+                {
+                    command.ExecuteNonQuery();
+                    Console.WriteLine("Task added!");
+                }
             }
-        }
+                
+        } 
 
         static void ViewTasks(SqlConnection connection, string title)
         {
